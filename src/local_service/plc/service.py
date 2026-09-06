@@ -47,7 +47,7 @@ def serve(simulator, ready_file=None, managed=False):
         simulator.stop()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="SimulatorX: native OPC UA node testing")
     parser.add_argument("--opcua-port", type=int, default=4840)
     parser.add_argument("--nodeset", action="append", help="XML files, in dependency order")
@@ -56,7 +56,7 @@ def main():
     parser.add_argument("--fast", action="store_true", help="Fast chamber dynamics for tests")
     parser.add_argument("--ready-file", help="Write actual endpoint after startup")
     parser.add_argument("--managed", action="store_true", help="Stop on parent stdin command/EOF")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not 0 <= args.opcua_port <= 65535:
         parser.error("Port must be in 0..65535; 0 requests an OS-assigned port")
     logging.basicConfig(level=logging.WARNING)

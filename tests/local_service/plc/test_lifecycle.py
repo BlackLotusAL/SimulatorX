@@ -1,7 +1,7 @@
 import time
 
 import pytest
-from simulatorx.__main__ import build_simulator
+from local_service.plc.service import build_simulator
 from tests.helpers import eventually
 
 

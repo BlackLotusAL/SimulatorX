@@ -1,21 +1,9 @@
-"""Load with pytest_plugins = ['simulatorx.pytest_plugin']; request fixtures to use them."""
-
+"""Native OPC UA fixtures with independent PLC ownership and Reset."""
 import pytest
 from opcua import Client
 
-from .bindings import load_bindings, reset_nodes
-from .process import SimulatorProcess
-
-
-def pytest_addoption(parser):
-    group = parser.getgroup("simulatorx")
-    group.addoption("--opcua-endpoint", default=None,
-                    help="Existing OPC UA server; omit to start an isolated process")
-
-
-def pytest_configure(config):
-    if config.getoption("numprocesses", default=None) not in (None, 0):
-        raise pytest.UsageError("SimulatorX fixtures require serial tests; use independent CI jobs for parallelism")
+from local_service.plc.bindings import load_bindings, reset_nodes
+from local_service.plc.process import SimulatorProcess
 
 
 @pytest.fixture(scope="session")

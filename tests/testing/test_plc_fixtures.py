@@ -5,17 +5,18 @@ from xml.etree import ElementTree
 
 import pytest
 
-from simulatorx.bindings import load_bindings, read_values
-from simulatorx.process import hidden_process_options
+from local_service.plc.bindings import load_bindings, read_values
+from local_service.plc.process import hidden_process_options
+from local_service.common.runtime import source_environment
 
 
 def run_child(tmp_path, endpoint, source):
-    (tmp_path / "conftest.py").write_text('pytest_plugins = ["simulatorx.pytest_plugin"]\n', encoding="utf-8")
+    (tmp_path / "conftest.py").write_text('pytest_plugins = ["pytest_plugin"]\n', encoding="utf-8")
     (tmp_path / "test_failures.py").write_text(source, encoding="utf-8")
     return subprocess.run([sys.executable, "-X", "utf8", "-m", "pytest", "-q", str(tmp_path),
                            "--opcua-endpoint", endpoint, "--junitxml", str(tmp_path / "junit.xml")],
                           cwd=tmp_path, capture_output=True, text=True, encoding="utf-8",
-                          timeout=30, **hidden_process_options())
+                          timeout=30, env=source_environment(), **hidden_process_options())
 
 
 def test_loading_plugin_does_not_connect_until_a_fixture_is_requested(tmp_path):
@@ -34,8 +35,8 @@ from pathlib import Path
 
 import pytest
 from opcua import ua
-from simulatorx.bindings import load_bindings
-import simulatorx.pytest_plugin as plugin
+from local_service.plc.bindings import load_bindings
+import testing.plc as plugin
 
 def record(test, event):
     with Path("cleanup-order.jsonl").open("a", encoding="utf-8") as stream:
@@ -116,7 +117,7 @@ def test_cleanup_failure_stops_later_cases(plc_service, plc_nodes, tmp_path, sta
     source = '''
 import pytest
 from opcua import Client
-import simulatorx.pytest_plugin as plugin
+import testing.plc as plugin
 
 @pytest.fixture(autouse=True)
 def break_cleanup(monkeypatch):

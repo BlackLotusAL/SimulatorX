@@ -5,8 +5,8 @@ from datetime import datetime
 import pytest
 from opcua import ua
 
-from simulatorx.bindings import load_bindings, read_values, reset_nodes
-from simulatorx.process import SimulatorProcess
+from local_service.plc.bindings import load_bindings, read_values, reset_nodes
+from local_service.plc.process import SimulatorProcess
 from tests.helpers import eventually
 
 pytestmark = pytest.mark.integration

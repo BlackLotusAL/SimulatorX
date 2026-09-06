@@ -1,5 +1,5 @@
-# Runtime, tests and build tools for Python 3.9.12 (64-bit).
-# Install this file before installing the project with --no-build-isolation --no-deps.
+# Runtime, tests and dependency build tools for Python 3.9.12 (64-bit).
+# Install dependencies with this file; run SimulatorX directly from src/.
 Pygments==2.21.0
 colorama==0.4.6
 exceptiongroup==1.3.1

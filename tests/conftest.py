@@ -1,1 +1,1 @@
-pytest_plugins = ["simulatorx.pytest_plugin"]
+pytest_plugins = ["pytest_plugin"]

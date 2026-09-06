@@ -1,6 +1,5 @@
 """Own only the simulator subprocess created by this manager."""
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -9,10 +8,7 @@ from pathlib import Path
 
 from opcua import Client
 from .bindings import load_bindings
-
-
-def hidden_process_options():
-    return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+from ..common.runtime import hidden_process_options, source_environment
 
 
 class SimulatorProcess:
@@ -29,11 +25,12 @@ class SimulatorProcess:
         directory = Path(self._temporary.name)
         ready = directory / "ready.json"
         self._log = (directory / "service.log").open("w+", encoding="utf-8")
-        args = [sys.executable, "-X", "utf8", "-m", "simulatorx", "--managed", "--fast",
+        args = [sys.executable, "-X", "utf8", "-m", "local_service.plc.service", "--managed", "--fast",
                 "--opcua-port", str(self.opcua_port), "--ready-file", str(ready)]
         try:
             self.process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self._log, stderr=subprocess.STDOUT,
-                                            text=True, encoding="utf-8", **hidden_process_options())
+                                            text=True, encoding="utf-8", env=source_environment(),
+                                            **hidden_process_options())
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 if self.process.poll() is not None:

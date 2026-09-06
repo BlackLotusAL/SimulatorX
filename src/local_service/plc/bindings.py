@@ -1,7 +1,6 @@
 import json
 import math
 from dataclasses import dataclass
-from importlib.resources import files
 from pathlib import Path
 from typing import Union
 
@@ -36,7 +35,7 @@ def describe(dv):
 
 
 def resource(name: str) -> Path:
-    return Path(str(files("simulatorx").joinpath("resources", name)))
+    return Path(__file__).resolve().parent / "resources" / name
 
 
 @dataclass(frozen=True)

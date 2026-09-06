@@ -3,8 +3,8 @@ from dataclasses import replace
 
 import pytest
 from opcua import Server, ua
-from simulatorx.__main__ import build_simulator
-from simulatorx.bindings import load_bindings, resource, validate_bindings
+from local_service.plc.service import build_simulator
+from local_service.plc.bindings import load_bindings, resource, validate_bindings
 
 
 @pytest.fixture
@@ -144,6 +144,6 @@ def test_namespace_remapping_and_contract_validation():
 @pytest.mark.parametrize("settings", [{"pump_tau": 0}, {"vent_tau": float("nan")},
                                      {"target_pressure": 101325}, {"tick_interval": -1}])
 def test_invalid_configuration_is_rejected(settings):
-    from simulatorx.simulator import VacuumSimulator
+    from local_service.plc.simulator import VacuumSimulator
     with pytest.raises(ValueError):
         VacuumSimulator(Server(), **settings)

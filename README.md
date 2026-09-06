@@ -1,8 +1,30 @@
 # SimulatorX
 
-用于本机、单真空腔室、串行测试的 OPC UA 仿真框架。八个可写节点保存业务状态，基础行为循环读取节点当前值并推进流程。测试可以原生改值，并通过 Reset 恢复基线。
+面向本地串行测试的仿真框架，统一提供 **PLC、SDK、TCP** 三类独立服务。PLC 通过 OPC UA 节点模拟单真空腔室；SDK 模拟有限行程旋转轴；TCP 按设备协议生成应答。三者分别管理状态、启动、停止和 Reset。
 
-运行、构建和测试统一使用 **Python 3.9.12（64 位）**。项目提供独立服务及可选的 pytest 环境插件。
+SDK 通过 Linux `.so` 适配库访问外部运动模型，并支持函数返回值序列、卡住和限位；TCP 提供应答字段序列。完整需求、行为契约、参考 ABI、协议及接入边界见[统一 PRD](docs/PRD.md)。下文提供快速运行与 pytest 接入说明。
+
+运行、SDK 编译和测试统一使用 **Python 3.9.12（64 位）**。安装依赖后直接运行源码。
+
+## 目录与职责
+
+```text
+src/
+├── main.py                 # 选择并启动一个组件，或编译参考 SDK
+├── pytest_plugin.py        # 统一注册三类 fixture 和命令行选项
+├── local_service/
+│   ├── common/             # 控制通信、序列、通用客户端、子进程源码路径
+│   ├── plc/                # OPC UA 服务、真空模型、节点资源和进程管理
+│   ├── sdk/                # SDK 服务、旋转轴模型、客户端、编译及 native 源码
+│   ├── tcp/                # TCP 服务、协议及控制客户端
+│   └── process.py          # SDK/TCP 子进程管理
+└── testing/                # common、plc、sdk、tcp 的 fixture 实现
+tests/
+├── local_service/          # plc、sdk、tcp 行为与协议测试
+└── testing/                # 插件生命周期及失败清理测试
+```
+
+`src` 是源码搜索根，导入使用 `local_service.*`、`testing.*` 和 `pytest_plugin`。资源随源码目录保存，`local_service` 不依赖 pytest。
 
 ## 安装与启动
 
@@ -12,15 +34,16 @@
 python --version
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock
-.\.venv\Scripts\python.exe -m pip install --no-build-isolation --no-deps -e .
-.\.venv\Scripts\python.exe -m simulatorx --opcua-port 4840 --fast
+.\.venv\Scripts\python.exe src/main.py plc --opcua-port 4840 --fast
 ~~~
 
 第一条命令应输出 Python 3.9.12。Linux/macOS 对应使用版本为 3.9.12 的解释器和 .venv/bin/python。
 
 默认地址为 opc.tcp://127.0.0.1:4840/simulatorx/。端口 0 自动分配；指定端口被占用时启动失败。Ctrl+C 停止服务并释放自身资源。
 
-CLI 是服务的命令行启动入口；安装后的 simulatorx 命令与 python -m simulatorx 调用相同入口。包配置声明 Python 版本、依赖及 XML/JSON 资源，供其他项目安装和导入。只运行服务可以安装项目本身；pytest 插件需要接入环境提供 pytest，开发测试使用锁定依赖。
+`python src/main.py plc|sdk|tcp` 只启动指定服务，各服务参数见对应命令的 `--help`。例如 `python src/main.py tcp --port 0 --control-port 0` 启动 TCP，SDK 的 Unix socket 参数见 [PRD 运行配置](docs/PRD.md#running)。`python src/main.py build-sdk --output artifacts/native` 编译参考 `.so`；此操作需要 Linux／WSL 和 C 编译器。
+
+启动脚本通过自身位置定位源码。切换工作目录后可以使用脚本的绝对路径；命令中显式传入的配置和输出相对路径仍相对于当前工作目录。子进程会得到绝对 `src` 搜索路径并保留已有 `PYTHONPATH`，自定义 TCP 协议模块也可通过 `PYTHONPATH` 提供。
 
 ## 节点与基础行为
 
@@ -53,10 +76,17 @@ P_next = P_current × exp(-dt / tau) + P_target × (1 - exp(-dt / tau))
 
 ## 接入既有 pytest 框架
 
-安装 SimulatorX，在测试项目的公共 conftest.py 注册插件：
+本仓库的 `pyproject.toml` 已配置 `pythonpath = ["src"]`。接入其他测试项目时，在其 pytest 配置中加入本仓库 `src` 的绝对路径，例如：
+
+~~~toml
+[tool.pytest.ini_options]
+pythonpath = ["/absolute/path/to/SimulatorX/src"]
+~~~
+
+也可以通过 `PYTHONPATH` 提供该路径。随后在测试项目的公共 conftest.py 注册插件：
 
 ~~~python
-pytest_plugins = ["simulatorx.pytest_plugin"]
+pytest_plugins = ["pytest_plugin"]
 ~~~
 
 | Fixture | 作用域 | 准备与释放 |
@@ -64,8 +94,17 @@ pytest_plugins = ["simulatorx.pytest_plugin"]
 | plc_service | session | 默认启动独享 fast 进程，返回 endpoint，整轮结束停止自身进程 |
 | plc_client | function | 建立原生 opcua.Client 连接，用例结束断开 |
 | plc_nodes | function | Reset，返回逻辑名称到 opcua.Node 的字典，用例结束再次 Reset |
+| sdk_service | session | 启动独享 SDK 服务或复用 --sdk-control；返回控制客户端，仅停止自建服务 |
+| sdk_axis / sdk_returns | function | 共用一次用例前后 Reset；分别提供轴控制和返回值序列 |
+| sdk_library | session | 编译参考 .so，或使用 --sdk-library 指定的库；本身不启动服务 |
+| tcp_service | session | 启动独享 TCP 服务或复用 --tcp-control；返回控制客户端，仅停止自建服务 |
+| tcp_responses | function | 用例前后 Reset，提供 TCP 应答字段序列 |
 
 加载插件只注册功能，测试或公共准备 fixture 必须通过依赖启用所需 fixture。插件不提供 sut fixture，真实 SUT 的业务调用和生命周期由既有框架负责。
+
+服务 fixture 为会话级，只有资源 fixture（`plc_nodes`、`sdk_axis` / `sdk_returns`、`tcp_responses`）触发逐用例 Reset。Reset 只作用于对应服务。统一插件管理自动生命周期，各 fixture 保持各自接口；外部服务的启动和停止由调用方负责。
+
+SUT 和后台任务 fixture 应依赖实际使用的资源 fixture，并登记停止与等待退出的清理回调，确保停止业务和写入者后再 Reset。SDK/TCP 在 Reset 前保存诊断；清理失败会中止后续用例。三类服务可以按需组合使用。
 
 plc_nodes 是项目 fixture，set_value() 是 python-opcua 原生 Node 方法。场景准备逻辑可以连续改值：
 
@@ -124,10 +163,10 @@ plc_nodes 在初次 Reset 前注册最终清理，准备失败和断言失败后
 
 ## XML、绑定与新增节点
 
-[节点 XML](simulatorx/resources/vacuum.xml) 定义地址空间、类型、权限及导入初值；[bindings.json](simulatorx/resources/bindings.json) 定义逻辑名称、Namespace URI、NodeId、类型、权限和 Reset 基线。二者人工配套维护，JSON 不会自动创建节点。启动和 Reset 最终采用绑定的 baseline。
+[节点 XML](src/local_service/plc/resources/vacuum.xml) 定义地址空间、类型、权限及导入初值；[bindings.json](src/local_service/plc/resources/bindings.json) 定义逻辑名称、Namespace URI、NodeId、类型、权限和 Reset 基线。二者人工配套维护，JSON 不会自动创建节点。启动和 Reset 最终采用绑定的 baseline。
 
 ~~~powershell
-python -m simulatorx --nodeset dependency.xml --nodeset chamber.xml --bindings bindings.json --profile profile.json
+python src/main.py plc --nodeset dependency.xml --nodeset chamber.xml --bindings bindings.json --profile profile.json
 ~~~
 
 当前行为要求包含上述八个逻辑节点及 VacuumChamber1 对象。新增业务节点先补充 XML 和绑定，需要自动变化时再适配行为循环。服务的自定义绑定不会自动传入当前 pytest fixture，接入方需同步调整测试侧映射。
@@ -140,9 +179,9 @@ profile 可设置 pump_tau、vent_tau、target_pressure、tolerance、tick_inter
 
 ~~~powershell
 python -m pytest -q --junitxml=artifacts/junit.xml
-python -m pytest tests/test_integration.py --setup-show -q
+python -m pytest tests/local_service/plc/test_integration.py --setup-show -q
 ~~~
 
-自测覆盖行为、原生读写、异常 DataValue、Reset、服务生命周期和 fixture 失败清理。JUnit 保存结果、耗时、断言失败与准备/清理错误。流水线应保留 pytest 退出码，并在失败时也归档 JUnit 和控制台日志。
+自测覆盖 PLC 原生节点、SDK 运动与实际 .so 调用、TCP 协议、三类服务独立生命周期和 fixture 失败清理。完整验收在 Linux／WSL 中进行，使用仅安装 requirements.lock 依赖的环境，不安装本框架。JUnit 保存结果、耗时、断言失败与准备/清理错误。流水线应保留 pytest 退出码，并在失败时也归档 JUnit 和控制台日志。
 
-核心代码见 [simulator.py](simulatorx/simulator.py)，插件见 [pytest_plugin.py](simulatorx/pytest_plugin.py)，行为边界见 [PRD](docs/PRD.md)。
+核心代码见 [simulator.py](src/local_service/plc/simulator.py)，插件见 [pytest_plugin.py](src/pytest_plugin.py)，行为边界见 [PRD](docs/PRD.md)。
