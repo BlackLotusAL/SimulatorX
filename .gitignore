@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local verification environments and run artifacts
+.venv*/
+artifacts/

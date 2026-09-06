@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simulatorx"
+version = "0.1.0"
+description = "OPC UA chamber simulator with directly writable nodes and isolated pytest fixtures"
+requires-python = "==3.9.12"
+dependencies = ["opcua==0.98.13"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.4,<9"]
+
+[project.scripts]
+simulatorx = "simulatorx.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["simulatorx*"]
+
+[tool.setuptools.package-data]
+simulatorx = ["resources/*.xml", "resources/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["integration: real OPC UA tests"]
