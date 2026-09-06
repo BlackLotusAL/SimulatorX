@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PLC 真空腔室仿真控制与自动化故障注入演示">
+  <title>SimulatorX · 真空腔室测试台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232663eb'/%3E%3Cpath d='m9 8 14 16M23 8 9 16' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">X</span><strong>Simulator<span>X</span></strong><span class="top-divider"></span><span class="top-title">真空腔室测试台</span></div>
+    <div class="connection"><span class="led" id="connectionLed"></span><span id="connectionText">正在连接环境</span><span class="local-tag">LOCAL</span></div>
+  </header>
+  <main>
+    <section class="overview" aria-label="运行概览">
+      <div><div class="eyebrow">PLC / VACUUM CHAMBER 01</div><h1>控制、注入、验证。</h1></div>
+      <div class="overview-right"><div class="run-summary"><span id="runStatus" class="badge neutral">尚未运行</span><span id="runCount">0 / 5 用例通过</span><span id="runTime">—</span></div><button id="runAll" class="button primary"><span aria-hidden="true">▶</span> 运行全部用例</button></div>
+    </section>
+    <div id="notice" class="notice" role="alert" hidden></div>
+    <div class="workspace">
+      <aside class="panel cases-panel">
+        <div class="panel-heading"><h2>自动化用例</h2><span class="subtle">PYTEST</span></div>
+        <div class="case-list" id="caseList"></div>
+        <div class="case-actions"><button id="runSelected" class="button primary">运行选中</button><button id="cancelRun" class="button danger-outline" disabled>停止本轮</button></div>
+        <p class="panel-note">故障被正确识别和处理，用例即通过。</p>
+      </aside>
+
+      <section class="panel chamber-panel">
+        <div class="panel-heading"><h2>真空腔室</h2><span class="badge neutral" id="chamberState">等待数据</span></div>
+        <div class="schematic" id="schematic">
+          <svg viewBox="0 0 720 355" role="img" aria-labelledby="diagramTitle diagramDescription">
+            <title id="diagramTitle">真空腔室实时示意图</title>
+            <desc id="diagramDescription">腔室连接压力传感器、破真空阀和真空泵。读数、流向和设备状态由 PLC 节点驱动。</desc>
+            <defs>
+              <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#dce4f1"/></pattern>
+              <linearGradient id="chamberFill" x2="0" y2="1"><stop stop-color="#f8fbff"/><stop offset="1" stop-color="#eaf2ff"/></linearGradient>
+            </defs>
+            <rect width="720" height="355" fill="url(#grid)"/>
+            <path class="pipe" d="M345 120V60H590"/>
+            <path class="pipe vent-flow" d="M345 120V60H590"/>
+            <path class="pipe" d="M461 259H553"/>
+            <path class="pipe pump-flow" d="M461 259H553"/>
+            <path class="pipe" d="M610 259H655V300"/>
+            <path d="M655 300h-12m12 6h-9m9 6h-5" fill="none" stroke="#9aa9bf" stroke-width="2"/>
+            <text x="599" y="52" class="svg-caption">大气</text>
+            <text x="458" y="25" text-anchor="middle" class="svg-label">破真空阀</text>
+            <g id="valveSymbol" transform="translate(457 60)"><circle r="23" fill="#f5f8fc"/><g class="valve-inner"><path d="M-21-12 0 0-21 12ZM21-12 0 0 21 12Z" fill="white" stroke="#8192ab" stroke-width="2.5"/></g></g>
+            <text x="458" y="105" text-anchor="middle" class="svg-status" id="valveLabel">—</text>
+            <path d="M228 88V120" fill="none" stroke="#93a6c4" stroke-width="5"/>
+            <g id="sensorSymbol"><circle cx="228" cy="67" r="24" fill="white" stroke="#93a6c4" stroke-width="2"/><path d="M214 72a15 15 0 0 1 28 0" fill="none" stroke="#d5e1f2" stroke-width="4"/><path id="gaugeNeedle" d="M228 73 237 57" fill="none" stroke="#2765e9" stroke-width="2.5" stroke-linecap="round"/><circle cx="228" cy="73" r="3" fill="#2765e9"/></g>
+            <text x="174" y="60" text-anchor="end" class="svg-label">压力传感器</text><text x="174" y="82" text-anchor="end" class="svg-status" id="sensorLabel">—</text>
+            <rect class="vessel-outline" x="189" y="121" width="274" height="194" rx="35" fill="url(#chamberFill)" stroke="#91a9ce" stroke-width="3"/>
+            <rect x="200" y="131" width="252" height="174" rx="28" fill="none" stroke="#cedcf0"/>
+            <g id="gasParticles" fill="#6fa2f7"><circle cx="219" cy="160" r="3"/><circle cx="266" cy="148" r="2"/><circle cx="420" cy="157" r="3"/><circle cx="433" cy="199" r="2"/><circle cx="212" cy="250" r="2"/><circle cx="239" cy="280" r="3"/><circle cx="389" cy="284" r="2"/><circle cx="427" cy="267" r="3"/><circle cx="364" cy="144" r="2"/><circle cx="306" cy="289" r="2"/></g>
+            <text x="326" y="178" text-anchor="middle" class="svg-caption">CHAMBER PRESSURE</text>
+            <text x="326" y="226" text-anchor="middle" class="pressure-value" id="pressureValue">—</text>
+            <text x="326" y="250" text-anchor="middle" class="svg-label">Pa</text>
+            <text x="326" y="278" text-anchor="middle" class="svg-status" id="pressureHint">等待 PLC 数据</text>
+            <g transform="translate(580 259)"><circle r="31" fill="white" stroke="#91a9ce" stroke-width="2.5"/><g class="pump-rotor"><path d="M0 0C-6-22 17-24 17-10ZM0 0C22-6 24 17 10 17ZM0 0C6 22-17 24-17 10ZM0 0C-22 6-24-17-10-17Z" fill="#b5c8e7"/></g><circle r="5" fill="#6d87b1"/></g>
+            <text x="580" y="203" text-anchor="middle" class="svg-label">真空泵</text>
+            <text x="580" y="316" text-anchor="middle" class="svg-status" id="pumpLabel">—</text>
+            <text x="326" y="342" text-anchor="middle" class="svg-caption">目标压力 1,000 Pa · 完成容差 ±20 Pa</text>
+          </svg>
+        </div>
+        <div class="state-strip">
+          <div><span>PLC 报警</span><strong id="plcAlarm">—</strong></div>
+          <div><span>示例控制器</span><strong id="controllerStatus">等待操作</strong></div>
+          <div><span>数据质量</span><strong id="qualityStatus">—</strong></div>
+        </div>
+        <div class="scene-footer"><span><i class="legend-line"></i> 流向由实际状态驱动</span><span id="sampleAge">每 100 ms 采样</span></div>
+      </section>
+
+      <aside class="panel controls-panel">
+        <div class="panel-heading"><h2>手动控制</h2><span id="controlMode" class="badge neutral">空闲可用</span></div>
+        <div class="controls-content">
+          <p class="control-label">环境操作</p>
+          <div class="control-grid"><button class="button" data-action="pump">↓ 抽真空</button><button class="button" data-action="vent">↑ 破真空</button><button class="button" data-action="open">开阀</button><button class="button" data-action="close">关阀</button></div>
+          <button class="button full" data-action="stop">■ 停止并关阀</button>
+          <div class="control-divider"></div>
+          <label class="control-label" for="faultSelect">故障注入</label>
+          <select id="faultSelect"><option value="sensor">压力传感器失效</option><option value="interlock">抽气中开阀</option><option value="pressure">负压力（−50,000 Pa）</option><option value="timeout">持续高压（抽气超时）</option></select>
+          <button id="injectFault" class="button fault-button full">＋ 注入故障</button>
+          <div id="faultStatus" class="fault-status">未设置注入条件</div>
+          <div class="control-divider"></div>
+          <button id="resetEnvironment" class="button full">↻ 重置环境</button>
+          <p class="panel-note">重置会停止控制器和故障写入，恢复节点基线。用例执行期间由 pytest 独占控制。</p>
+        </div>
+      </aside>
+    </div>
+
+    <div class="bottom-grid">
+      <section class="panel trend-panel"><div class="panel-heading"><h2>压力趋势</h2><div class="chart-legend"><span><i class="legend-line"></i> 压力 / Pa</span><span><i class="legend-dot"></i> 故障注入</span></div></div><div class="chart-wrap"><canvas id="pressureChart" role="img" aria-label="最近两分钟的实际压力曲线，异常测量显示为断线"></canvas></div></section>
+      <section class="panel event-panel"><div class="panel-heading"><h2>执行记录</h2><span id="eventCount" class="subtle">0 条事件</span></div><div id="eventList" class="event-list" role="log" aria-label="控制、注入与断言事件"><div class="empty-events">环境就绪后，操作和测试步骤将显示在这里。</div></div></section>
+    </div>
+    <footer class="footer"><span id="endpoint">本地独享仿真环境</span><div id="reports" hidden><span>本轮报告</span><a href="/api/artifacts/junit.xml">JUnit</a><a href="/api/artifacts/events.jsonl">步骤 JSONL</a><a href="/api/artifacts/pytest.log">pytest 日志</a></div><span>SimulatorX / Python + OPC UA + pytest</span></footer>
+  </main>
+</body>
+</html>

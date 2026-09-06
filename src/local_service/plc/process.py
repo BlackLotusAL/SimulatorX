@@ -12,8 +12,9 @@ from ..common.runtime import hidden_process_options, source_environment
 
 
 class SimulatorProcess:
-    def __init__(self, opcua_port=0):
+    def __init__(self, opcua_port=0, *, profile=None):
         self.opcua_port = opcua_port
+        self.profile = profile
         self.process = None
         self.endpoint = None
         self._temporary = self._log = None
@@ -25,8 +26,9 @@ class SimulatorProcess:
         directory = Path(self._temporary.name)
         ready = directory / "ready.json"
         self._log = (directory / "service.log").open("w+", encoding="utf-8")
-        args = [sys.executable, "-X", "utf8", "-m", "local_service.plc.service", "--managed", "--fast",
+        args = [sys.executable, "-X", "utf8", "-m", "local_service.plc.service", "--managed",
                 "--opcua-port", str(self.opcua_port), "--ready-file", str(ready)]
+        args += ["--profile", str(Path(self.profile).resolve())] if self.profile else ["--fast"]
         try:
             self.process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self._log, stderr=subprocess.STDOUT,
                                             text=True, encoding="utf-8", env=source_environment(),

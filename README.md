@@ -45,6 +45,21 @@ python -m venv .venv
 
 启动脚本通过自身位置定位源码。切换工作目录后可以使用脚本的绝对路径；命令中显式传入的配置和输出相对路径仍相对于当前工作目录。子进程会得到绝对 `src` 搜索路径并保留已有 `PYTHONPATH`，自定义 TCP 协议模块也可通过 `PYTHONPATH` 提供。
 
+## 真空腔室可视化 Demo
+
+在 Python 3.9.12 环境中安装独立的演示依赖，运行 `demo` 子命令：
+
+~~~powershell
+python -m pip install -r requirements-demo.lock
+python src/main.py demo
+~~~
+
+程序自动启动独享 PLC 仿真并打开本地浏览器，网页端口自动分配。界面提供真空腔室示意图、压力曲线、五个真实 pytest 用例、执行记录以及空闲时的手动控制和故障注入。运行过程中由 pytest 独占控制，停止或结束后恢复环境；预期故障被正确处理时用例通过。
+
+`--port 8080` 指定网页端口，`--no-browser` 只输出地址而不打开浏览器。Linux／WSL 中也可运行，并通过输出的本机地址访问。依赖安装后运行不需要联网。Ctrl+C 退出并回收本轮进程；只关闭浏览器标签不会停止 Python 服务。
+
+完整操作步骤、结果解释、清理与报告位置见[演示说明](docs/DEMO.md)。
+
 ## 节点与基础行为
 
 Namespace URI：urn:simulatorx:mvp:vacuum。对象：Objects/SimulatorX/VacuumChamber1。客户端按 URI 查询实际命名空间索引。

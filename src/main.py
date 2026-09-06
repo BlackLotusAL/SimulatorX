@@ -8,6 +8,7 @@ ENTRY_POINTS = {
     "sdk": "local_service.sdk.service",
     "tcp": "local_service.tcp.service",
     "build-sdk": "local_service.sdk.build",
+    "demo": "demo.app",
 }
 
 
