@@ -2,6 +2,8 @@
 
 按「整机 → 子系统 → 硬件」组织的本地仿真环境，面向串行自动化测试。参考整机包含真空 PLC、旋转轴和示例通信硬件，分别通过 OPC UA、原生 SDK、TCP 暴露接口。各硬件独立维护模型、配置和状态，协议宿主管理服务，整机统一管理生命周期。
 
+可选的 [三协议浏览器演示](docs/DEMO.md) 提供 PLC、SDK、TCP 标签页、真实设备交互和十五个 pytest 场景；安装 `requirements-demo.lock` 后运行 `python src/main.py demo`。静态结构说明见 [离线架构总览](docs/architecture.html)。
+
 ## 目录
 
 ```text
@@ -19,6 +21,19 @@ src/
 ├── test/                       # framework、protocols、设备和整机回归
 ├── main.py
 └── pytest_plugin.py
+examples/demo/                   # 统一三协议演示
+├── hub.py                      # 协议装配、延迟初始化及全局互斥
+├── web/                        # 网页服务、API 与静态资源
+├── common/                     # 公共运行、事件、报告及测试支持
+├── plc/                        # PLC 控制、场景及 pytest 插件
+├── sdk/                        # SDK 控制、场景及 pytest 插件
+├── tcp/                        # TCP 控制、场景及 pytest 插件
+└── tests/                      # 公共、网页及协议验收
+    ├── common/                 # 跨协议互斥、报告与恢复
+    ├── web/                    # 网页入口、测试收集与 managed 退出
+    ├── plc/                    # PLC 验收
+    ├── sdk/                    # 原生 SDK 验收
+    └── tcp/                    # Modbus TCP 验收
 examples/sut_integration/        # 独立业务侧接入与验收
 docs/                           # 需求契约与测试审查资料
 ```

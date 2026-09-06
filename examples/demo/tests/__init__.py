@@ -1,0 +1,1 @@
+"""Browser demo acceptance checks."""

@@ -22,7 +22,12 @@ def main(argv=None):
     build.add_argument("--device", default=str(DEFAULT_DEVICE))
     build.add_argument("--hardware", required=True)
     build.add_argument("--output", required=True)
+    commands.add_parser("demo", help="Run the optional PLC / SDK / TCP browser demo")
     args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] == "demo":
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples"))
+        from demo.web.app import main as demo_main
+        return demo_main(args_list[1:])
     args = parser.parse_args(args_list)
     try:
         if args.command == "build-sdk":
