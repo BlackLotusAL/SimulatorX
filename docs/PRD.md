@@ -1,227 +1,105 @@
-# SimulatorX MVP：OPC UA PLC 仿真与故障注入技术方案
+# SimulatorX 基础仿真框架
 
-## 1. 目标
+## 1. 目标与边界
 
-MVP 启动一个可被 SUT 连接的 OPC UA PLC 仿真服务，并让测试人员通过 REST API 在 Setup 中注入节点故障、在 Teardown 中清除故障。
+以软件提供本机单真空腔室的 OPC UA 节点，支持基础流程、原生改值和环境重置，供既有自动化框架控制 PLC 条件。SUT（被测业务系统）的接口调用、异常判定和生命周期由接入方负责。
 
-测试流程固定为：
+交付 OPC UA 服务、基础行为、Reset、节点资源、进程管理、pytest 环境插件和框架自测。运行、构建、测试固定使用 Python 3.9.12（64 位）；opcua 为 0.98.13，测试基线为 pytest 8.4.2，完整依赖固定在 requirements.lock。
 
-1. 启动仿真并等待 `/healthz` Ready。
-2. Setup 调用 Reset，再注入真空度或 PLC 状态故障。
-3. SUT 通过 OPC UA Read/Subscribe 观察异常，测试验证中断、报警或弹窗行为。
-4. Teardown 清除故障并再次 Reset，下一条用例从确定基线开始。
+默认单实例串行，监听 127.0.0.1；高精度物理特性和真实设备通信时序一致性需另行验证。
 
-本方案仅包含一个 Python 进程、一个 OPC UA Server、一个 REST 控制服务、一个真空腔模型、三种节点故障和 pytest 使用接口。
+## 2. 核心架构
 
-## 2. 技术架构
+VacuumSimulator 管理节点初始化、启动、停止、行为更新和 Reset。节点保存唯一业务状态，每轮读取当前值计算后续输出。一个锁同步原生请求、每轮行为和 Reset。
 
-- Python 3.11。
-- `asyncua` 实现 OPC UA Server、节点、订阅和 `DataValue`。
-- FastAPI lifespan 启停 OPC UA Server 和模型任务，Uvicorn 提供 REST 服务。
-- `httpx` 封装测试客户端，pytest 提供用例 fixture。
+CLI 解析资源、端口和 profile 后启动同一服务。SimulatorProcess 使用该入口启动独享子进程，确认可连接后返回 endpoint，只停止自身创建的进程。外部实例由调用方管理。
 
-```mermaid
-flowchart LR
-    T[pytest] -->|REST| API[FastAPI]
-    S[SUT] -->|OPC UA| UA[asyncua Server]
-    API --> F[FaultManager]
-    UA -->|控制节点| M[VacuumModel]
-    M -->|正常值| P[Publisher]
-    F -->|故障覆盖| P
-    P -->|DataValue| UA
-```
+包配置声明 Python 版本、运行依赖、可选测试依赖和 XML/JSON 资源，供其他项目安装并加载插件。
 
-- 整个服务运行在一个 asyncio 事件循环中；Uvicorn 固定为 `workers=1`、`reload=False`。
-- FastAPI lifespan 依次创建节点、启动 OPC UA Server 和 100 ms 模型任务。任一步失败，服务启动失败。
-- `VacuumModel` 保存无故障真实值；`FaultManager` 保存活动故障；`Publisher` 生成对外 `DataValue`。
-- 模型 Tick、故障应用、故障清除和 Reset 共用一个 `asyncio.Lock`。
-- 故障不修改模型真实值；清除后发布模型当前值，Reset 才恢复初始值。
-- REST 成功响应保证 OPC UA 服务端已经完成写入并可立即读取；测试仍需等待 SUT 处理订阅或业务逻辑。
-- 节点更新使用 `Node.write_value(DataValue)`，显式设置 Variant 类型、StatusCode 和 UTC SourceTimestamp。
-- 进程停止后必须释放 OPC UA 和 REST 端口。
+## 3. 节点契约与配置
 
-## 3. 真空腔 PLC Demo
+Namespace URI：urn:simulatorx:mvp:vacuum。对象：Objects/SimulatorX/VacuumChamber1。按 URI 解析实际索引，八个变量均为可读写标量。
 
-### 3.1 OPC UA 地址空间
+| 逻辑节点 | 类型 | Reset 初值 | 定义 |
+|---|---|---|---|
+| vacuum.valve_command | UInt16 | 0 | 0 无命令、1 开阀、2 关阀 |
+| vacuum.valve_open | Boolean | false | 破真空阀反馈 |
+| vacuum.valve_result | UInt16 | 0 | 0 空闲、1 执行中、2 成功、3 失败 |
+| vacuum.command | UInt16 | 0 | 0 无命令、1 抽真空、2 破真空、3 停止并关阀 |
+| vacuum.pressure_pa | Double | 101325 | 当前压力，Pa |
+| vacuum.state_code | UInt16 | 0 | 0 空闲、1 抽气、2 破真空、3 真空达标、4 故障 |
+| vacuum.result_code | UInt16 | 0 | 真空操作结果，编码同 valve_result |
+| vacuum.alarm_code | UInt16 | 0 | 0 无报警、1 抽气与开阀冲突、2 非法命令 |
 
-- 默认 Endpoint：`opc.tcp://127.0.0.1:4840/simulatorx/`
-- Namespace URI：`urn:simulatorx:mvp:vacuum`
-- 对象路径：`Objects/SimulatorX/VacuumChamber1`
+XML 定义层级、NodeId、类型、权限及导入初值；bindings.json 定义逻辑映射、类型和权限校验信息及 baseline。二者人工同步。启动和 Reset 采用绑定基线，单独修改 JSON 不会创建节点。
 
-客户端通过 Namespace URI 查询 Namespace Index，不硬编码 `ns=2`。节点使用稳定字符串 NodeId。
+保留标量类型约束，允许类型范围内的异常业务值。UInt16 接受 0–65535，Double 接受负值和非有限值，Null Variant 表示空值。错误类型返回 BadTypeMismatch，保持原节点值。
 
-| REST 故障目标 | String NodeId | 类型 | 权限 | 基线 |
-| --- | --- | --- | --- | --- |
-| — | `VacuumChamber1.Control.PumpEnabled` | Boolean | 读写 | `false` |
-| — | `VacuumChamber1.Control.VentOpen` | Boolean | 读写 | `false` |
-| — | `VacuumChamber1.Control.TargetPressurePa` | Double | 读写 | `1000.0` |
-| `vacuum.pressure_pa` | `VacuumChamber1.Status.PressurePa` | Double | 只读 | `101325.0` |
-| `vacuum.state_code` | `VacuumChamber1.Status.StateCode` | UInt16 | 只读 | `0` |
-| `vacuum.alarm_code` | `VacuumChamber1.Status.AlarmCode` | UInt16 | 只读 | `0` |
+## 4. 基础行为
 
-MVP 只允许对三个只读状态节点注入故障；三个控制节点由 SUT 通过 OPC UA 写入。
+| 动作或条件 | 阀门反馈与结果 | 真空状态、结果与报警 |
+|---|---|---|
+| 开阀或关阀 | 反馈对应变化，结果 1 → 2 | 独立操作不改真空结果；抽气开阀触发联锁 |
+| 阀门命令非法 | 反馈保持，阀门结果 3 | 报警 2 |
+| 关阀时抽真空 | 阀门保持 | 状态 1、结果 1、报警 0 |
+| 开阀时请求抽气或抽气中开阀 | 阀门可执行成功 | 状态 4、结果 3、报警 1 |
+| 破真空 | 先退出抽气再开阀 | 状态 2、结果 1、报警 0 |
+| 抽气达标 | 保持关闭 | 状态 3、结果 2 |
+| 破真空达到常压 | 保持打开 | 状态 0、结果 2 |
+| 停止并关阀 | 关闭、阀门结果 2 | 状态 0、结果 0，报警保持 |
+| 真空命令非法 | 反馈保持 | 状态 4、结果 3、报警 2 |
 
-状态码：`0=IDLE`、`1=PUMPING`、`2=VENTING`、`3=AT_TARGET`、`4=FAULT`。
+处理命令后归零，确认归零后可重复提交；归零前的新写入可能替换尚未处理的命令。阀门立即反馈，客户端可能看不到短暂执行中状态。有效抽气/破真空命令和 Reset 清除报警。
 
-报警码：`0=无报警`、`1=Pump 与 Vent 同时开启`、`2=抽气时目标压力不在 0.1–101325 Pa`。
+每 100 ms 采用 P_next = P_current × exp(-dt / tau) + P_target × (1 - exp(-dt / tau)) 更新。开阀趋向 101325 Pa，关阀抽气趋向 1000 Pa，其他状态保持压力；完成容差 20 Pa。普通抽气/破真空时间常数为 3 s / 1.5 s，fast 为 0.2 s / 0.15 s。
 
-### 3.2 真空模型
+测试写入值直接参与后续计算，自动行为可能继续更新该值。持续异常由测试重复写入。压力质量非 Good、Null、NaN 或无穷时跳过计算并保留 DataValue，继续处理命令和 Reset；无可计算压力时不能判定完成。
 
-模型使用单调时钟计算 `dt`，目标 Tick 周期为 100 ms：
+状态、结果和报警随动作或状态转换更新，静态状态节点无需持续更新时间戳。异常值本身不会自动产生业务报警，业务判断由 SUT 完成。
 
-```text
-抽气：P = max(Target, P + (Target - P) × (1 - exp(-dt / 3.0)))
-充气：P = P + (101325.0 - P) × (1 - exp(-dt / 1.5))
-空闲：P = min(101325.0, P + 5.0 × dt)
-容差：Tolerance = max(5.0, Target × 2%)
-```
+## 5. 原生接口与 Reset
 
-每个 Tick 按下列顺序重新计算状态和报警，不锁存上一 Tick 的结果：
+使用 opcua.Node.set_value(value, VariantType) 写数值，或传入 ua.DataValue 写质量码及源/服务器时间戳。多次请求按实际时序生效，不承诺跨请求的多节点事务或持续覆盖。
 
-| 优先级 | 条件 | 状态与报警 | 压力行为 |
-| --- | --- | --- | --- |
-| 1 | Pump 与 Vent 同时开启 | `FAULT`，报警 `1` | 充气 |
-| 2 | 仅 Vent 开启 | `VENTING`，报警 `0` | 充气 |
-| 3 | 仅 Pump 开启且目标非法 | `FAULT`，报警 `2` | 空闲泄漏 |
-| 4 | 仅 Pump 开启且 `P > Target + Tolerance` | `PUMPING`，报警 `0` | 抽气 |
-| 5 | 仅 Pump 开启且 `P <= Target + Tolerance` | `AT_TARGET`，报警 `0` | 保持当前压力 |
-| 6 | Pump 与 Vent 均关闭 | `IDLE`，报警 `0` | 空闲泄漏 |
+get_value()/get_data_value() 遇到 Bad 质量会抛异常；完整异常 DataValue 通过 get_attributes([Value]) 或原生 Read 请求读取。
 
-PLC 控制节点的写入最晚在下一个 Tick 生效。
+VacuumChamber1.Reset 为同一命名空间的原生方法，无输入，成功返回 Boolean true。恢复绑定基线、Good、源/服务器时间戳和计时，保留连接与订阅。恢复失败后服务不可复用，需要重启。
 
-## 4. 故障注入
+Reset 前必须停止 SUT 和后台写入任务；Reset 不阻止其他客户端随后再次写入。
 
-### 4.1 故障类型
+## 6. pytest 环境插件
 
-| `mode` | 请求参数 | 生效行为 | 清除行为 |
-| --- | --- | --- | --- |
-| `override` | `value` | 每个 Tick 发布指定值、`Good` 和新时间戳。值必须匹配目标 OPC UA 类型；Double 必须为有限数值，但不校验物理范围。 | 发布模型当前值和 `Good`。 |
-| `freeze` | 无 | 捕获当前 `DataValue`，停止写该节点，使 Value、StatusCode 和 SourceTimestamp 保持不变。 | 发布模型当前值和 `Good`。 |
-| `bad_quality` | 无 | Publisher 显式发布 `Value=null`、`StatusCode=BadSensorFailure`。 | 发布模型当前值和 `Good`。 |
+公共 conftest.py 注册 pytest_plugins = ["simulatorx.pytest_plugin"]。
 
-每个目标最多一个活动故障。故障只影响目标节点，不联动其他状态节点。例如压力异常不会自动修改 `AlarmCode`。
+| Fixture | 作用域 | 职责 |
+|---|---|---|
+| plc_service | session | 启动独享 fast 服务并自动分配端口，或复用 --opcua-endpoint；仅停止自身服务 |
+| plc_client | function | 建立原生连接，结束时断开 |
+| plc_nodes | function | Reset，返回逻辑名称到原生 Node 的映射，结束时再次 Reset |
 
-### 4.2 REST API
+加载插件不会执行全部 fixture，需通过用例依赖或公共准备 fixture 启用。插件不提供 sut fixture，真实 SUT 由既有框架管理。SUT 和写入任务 fixture 应依赖 plc_nodes，并登记停止和等待退出回调。
 
-- 默认 Base URL：`http://127.0.0.1:8000`
-- OpenAPI：`/docs`
-- CLI 的 `--opcua-port` 和 `--api-port` 可覆盖默认端口。
+清理顺序：停止 SUT/写入任务 → Reset → 断开测试连接 → 整轮结束停止自建服务。plc_nodes 在首次 Reset 前登记最终清理，准备和断言失败后仍尝试恢复。Reset 或断开连接失败记录 pytest 错误并停止后续用例。
 
-| 方法与路径 | 语义 |
-| --- | --- |
-| `GET /healthz` | OPC UA 和模型任务正常时返回 Ready，否则返回 503。 |
-| `PUT /api/v1/faults/{fault_id}` | 幂等应用故障。 |
-| `DELETE /api/v1/faults/{fault_id}` | 幂等清除故障。 |
-| `POST /api/v1/reset` | 清除全部故障并恢复基线。 |
+SUT 停止失败或 pytest 被强制结束时，接入方负责终止本轮、回收写入者和恢复环境。插件要求串行运行，并行作业应使用不同实例。
 
-测试端为每次故障指定 fault ID。即使 PUT 响应丢失，Teardown 仍能用同一 ID 清理。
+改值可以放在场景准备逻辑中，业务用例仍调用 SUT 接口并断言可观察结果。写入成功不等于异常检测成功；预期异常被正确处理时测试可以通过。
 
-应用压力高值：
+## 7. 启动、扩展和报告
 
-```http
-PUT /api/v1/faults/test-pressure-high
-Content-Type: application/json
+默认端口 4840，0 自动分配；冲突应报错并保留已有进程。CLI 支持 --nodeset（多次传入时按依赖顺序导入）、--bindings、--profile、--fast，显式 profile 优先，默认 pytest 使用 fast。
 
-{
-  "target": "vacuum.pressure_pa",
-  "mode": "override",
-  "value": 200000.0
-}
-```
+新增节点需同步 XML 和绑定，需要自动变化时再适配行为。当前行为要求八个真空逻辑节点和 VacuumChamber1 对象。服务自定义绑定不会自动传入插件，测试侧应同步映射。
 
-首次创建返回 `201`；所有故障模式的成功体固定为以下结构，`effective.value` 可以是布尔值、数值或 Null：
+JUnit 记录数量、结果、耗时、断言失败与准备/清理错误；控制台日志辅助定位。流水线保留退出码，失败时也归档产物。虚拟环境、报告及构建临时目录不纳入源码提交。
 
-```json
-{
-  "fault_id": "test-pressure-high",
-  "target": "vacuum.pressure_pa",
-  "mode": "override",
-  "effective": {"value": 200000.0, "status_code": "Good"}
-}
-```
+## 8. 验收与归属
 
-接口规则：
+| 验证内容 | 对应文件 |
+|---|---|
+| 行为、联锁、非法命令、单一压力来源和配置校验 | [test_simulator.py](../tests/test_simulator.py) |
+| 运行计时、Reset 失败和行为线程异常 | [test_lifecycle.py](../tests/test_lifecycle.py) |
+| 原生读写、类型、DataValue、连接订阅和端口生命周期 | [test_integration.py](../tests/test_integration.py) |
+| 插件按需启用、准备/断言失败清理、写入任务停止顺序和清理失败中止 | [test_fixtures.py](../tests/test_fixtures.py) |
 
-- 活动故障使用相同 ID 和相同请求重试时返回 `200` 和相同结果。
-- 活动故障使用相同 ID、不同请求时返回 `409 FAULT_ID_REUSED`。
-- 同一目标已被其他 ID 占用时返回 `409 TARGET_BUSY`。
-- DELETE 对存在或不存在的 ID 均返回 `204`。DELETE 或 Reset 后，该 ID 可重新创建。
-- 应用失败时返回 `500 FAULT_APPLY_FAILED`，故障表保持原状。
-- 清除失败时返回 `500 FAULT_CLEAR_FAILED`，原故障保持活动。
-- Reset 清除故障并恢复六个节点的基线，不重启 OPC UA Server，不断开现有客户端和订阅。
-- Reset 中任一节点恢复失败时返回 `500 RESET_FAILED`；调用方必须终止当前测试，不得把部分恢复视为成功。
-
-错误体固定为：
-
-```json
-{"error": {"code": "TARGET_BUSY", "message": "Target already has an active fault"}}
-```
-
-参数错误返回 422，目标不存在返回 404，冲突返回 409，内部写入失败返回 500，服务未就绪返回 503。
-
-## 5. 测试人员使用方法
-
-### 5.1 启停与直接调用
-
-```powershell
-python -m simulatorx --opcua-port 4840 --api-port 8000
-```
-
-端口占用时启动失败，不自动切换端口。进程停止后两个端口均可立即重新绑定。
-
-```bash
-curl -X PUT http://127.0.0.1:8000/api/v1/faults/test-pressure-high \
-  -H "Content-Type: application/json" \
-  -d '{"target":"vacuum.pressure_pa","mode":"override","value":200000.0}'
-
-curl -X DELETE \
-  http://127.0.0.1:8000/api/v1/faults/test-pressure-high
-```
-
-### 5.2 Python/pytest 接口
-
-`SimulatorControl` 只封装 REST，公开以下方法：
-
-- `wait_ready(timeout)`
-- `reset()`
-- `inject(fault_id, target, mode, *, value=None)`
-- `clear(fault_id)`
-- `fault(...)` 上下文管理器
-
-```python
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def isolated_simulator(simulator_control):
-    simulator_control.reset()
-    yield
-    simulator_control.reset()
-
-
-def test_pressure_sensor_high(simulator_control, sut):
-    with simulator_control.fault(
-        fault_id="test-pressure-sensor-high",
-        target="vacuum.pressure_pa",
-        mode="override",
-        value=200000.0,
-    ):
-        sut.start_process()
-        sut.wait_for_pressure_alarm(timeout=3)
-        assert sut.pressure_alarm_active
-```
-
-上下文管理器在 `finally` 中清除当前故障，fixture 在 Teardown 再执行 Reset。两项操作均幂等。
-
-测试 `bad_quality` 时，使用 `read_data_value(raise_on_bad_status=False)` 或订阅回调检查完整 `DataValue`；服务端发布结果固定为 Null Value 和 `BadSensorFailure`。
-
-## 6. 验收标准
-
-1. `/healthz` Ready 后，真实 OPC UA Client 能浏览全部节点、写入三个控制节点、读取并订阅三个状态节点。
-2. 真空模型在所有状态组合下严格遵守优先级表，不出现升压式抽气或状态/报警冲突。
-3. `override`、`freeze`、`bad_quality` 的 Value、StatusCode 和 SourceTimestamp 符合定义，清除后恢复模型当前值和 `Good`。
-4. REST 成功后 OPC UA 服务端立即可读；测试通过等待 SUT 业务结果完成断言。
-5. PUT/DELETE 可安全重试；ID 复用、目标冲突或节点写入失败不破坏已有故障状态。
-6. Reset 成功后全部节点恢复基线且连接/订阅保持；Reset 失败返回 500，当前测试停止执行。
-7. 测试断言失败时 Teardown 仍清除故障，下一条用例从基线开始。
-8. 停止进程后 OPC UA 和 REST 端口均被释放。
+实现见 [simulator.py](../simulatorx/simulator.py)、[bindings.py](../simulatorx/bindings.py) 和 [pytest_plugin.py](../simulatorx/pytest_plugin.py)。在仅包含交付文件的环境中安装并运行 Python 3.9.12 自测，以当次结果作为验收依据。
