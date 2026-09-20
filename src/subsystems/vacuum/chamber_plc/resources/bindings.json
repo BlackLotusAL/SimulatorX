@@ -1,0 +1,66 @@
+[
+  {
+    "key": "vacuum.valve_command",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Control.ValveCommand",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  },
+  {
+    "key": "vacuum.valve_open",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.ValveOpen",
+    "variant_type": "Boolean",
+    "writable": true,
+    "baseline": false
+  },
+  {
+    "key": "vacuum.valve_result",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.ValveResult",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  },
+  {
+    "key": "vacuum.command",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Control.VacuumCommand",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  },
+  {
+    "key": "vacuum.pressure_pa",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.PressurePa",
+    "variant_type": "Double",
+    "writable": true,
+    "baseline": 101325
+  },
+  {
+    "key": "vacuum.state_code",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.StateCode",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  },
+  {
+    "key": "vacuum.result_code",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.ResultCode",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  },
+  {
+    "key": "vacuum.alarm_code",
+    "namespace_uri": "urn:simulatorx:mvp:vacuum",
+    "identifier": "s=VacuumChamber1.Status.AlarmCode",
+    "variant_type": "UInt16",
+    "writable": true,
+    "baseline": 0
+  }
+]

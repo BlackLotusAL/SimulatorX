@@ -1,0 +1,35 @@
+{
+  "id": "reference_machine",
+  "subsystems": [
+    {
+      "id": "vacuum",
+      "hardware": [
+        {
+          "id": "chamber_plc",
+          "type": "opcua",
+          "port": 0,
+          "nodeset": "vacuum.xml"
+        }
+      ]
+    },
+    {
+      "id": "motion",
+      "hardware": [
+        {
+          "id": "rotary_axis",
+          "type": "sdk"
+        }
+      ]
+    },
+    {
+      "id": "detector",
+      "hardware": [
+        {
+          "id": "modbus_tcp",
+          "type": "tcp",
+          "port": 0
+        }
+      ]
+    }
+  ]
+}

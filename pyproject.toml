@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+testpaths = ["src/test"]
+pythonpath = ["src"]
+addopts = "-ra --import-mode=importlib -p pytest_plugin"
+markers = ["integration: real services, sockets, child processes or native builds", "linux_sdk: requires Linux and a C compiler"]

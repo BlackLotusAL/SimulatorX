@@ -1,0 +1,119 @@
+<?xml version='1.0' encoding='utf-8'?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd" xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd">
+  <NamespaceUris>
+    <Uri>urn:simulatorx:mvp:vacuum</Uri>
+  </NamespaceUris>
+  <Aliases>
+    <Alias Alias="Boolean">i=1</Alias>
+    <Alias Alias="UInt16">i=5</Alias>
+    <Alias Alias="Double">i=11</Alias>
+  </Aliases>
+  <UAObject NodeId="ns=1;s=SimulatorX" BrowseName="1:SimulatorX">
+    <DisplayName>SimulatorX</DisplayName>
+    <References>
+      <Reference ReferenceType="i=35" IsForward="false">i=85</Reference>
+      <Reference ReferenceType="i=40">i=58</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;s=VacuumChamber1" BrowseName="1:VacuumChamber1">
+    <DisplayName>VacuumChamber1</DisplayName>
+    <References>
+      <Reference ReferenceType="i=35" IsForward="false">ns=1;s=SimulatorX</Reference>
+      <Reference ReferenceType="i=40">i=58</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;s=VacuumChamber1.Control" BrowseName="1:Control">
+    <DisplayName>Control</DisplayName>
+    <References>
+      <Reference ReferenceType="i=35" IsForward="false">ns=1;s=VacuumChamber1</Reference>
+      <Reference ReferenceType="i=40">i=58</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;s=VacuumChamber1.Status" BrowseName="1:Status">
+    <DisplayName>Status</DisplayName>
+    <References>
+      <Reference ReferenceType="i=35" IsForward="false">ns=1;s=VacuumChamber1</Reference>
+      <Reference ReferenceType="i=40">i=58</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Control.ValveCommand" BrowseName="1:ValveCommand" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ValveCommand</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Control</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.ValveOpen" BrowseName="1:ValveOpen" DataType="Boolean" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ValveOpen</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:Boolean>false</uax:Boolean>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.ValveResult" BrowseName="1:ValveResult" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ValveResult</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Control.VacuumCommand" BrowseName="1:VacuumCommand" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>VacuumCommand</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Control</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.PressurePa" BrowseName="1:PressurePa" DataType="Double" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>PressurePa</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:Double>101325</uax:Double>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.StateCode" BrowseName="1:StateCode" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>StateCode</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.ResultCode" BrowseName="1:ResultCode" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>ResultCode</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;s=VacuumChamber1.Status.AlarmCode" BrowseName="1:AlarmCode" DataType="UInt16" ValueRank="-1" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>AlarmCode</DisplayName>
+    <References>
+      <Reference ReferenceType="i=47" IsForward="false">ns=1;s=VacuumChamber1.Status</Reference>
+      <Reference ReferenceType="i=40">i=63</Reference>
+    </References>
+    <Value>
+      <uax:UInt16>0</uax:UInt16>
+    </Value>
+  </UAVariable>
+</UANodeSet>
