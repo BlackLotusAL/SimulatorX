@@ -3,7 +3,9 @@
 
 /* Reference ABI only. A vendor library requires its own header-compatible shim. */
 #include <stdint.h>
-#if defined(__GNUC__)
+#if defined(_WIN32)
+#define SX_API __declspec(dllexport)
+#elif defined(__GNUC__)
 #define SX_API __attribute__((visibility("default")))
 #else
 #define SX_API

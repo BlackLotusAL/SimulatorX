@@ -17,8 +17,8 @@ from test.helpers import eventually, service_process
 
 @pytest.mark.parametrize("selection", ["vacuum/chamber_plc", "motion/rotary_axis", "detector/modbus_tcp"])
 def test_source_launcher_from_another_working_directory(tmp_path, selection):
-    if selection.startswith("motion") and sys.platform != "linux":
-        pytest.skip("Linux SDK")
+    if selection.startswith("motion") and sys.platform not in ("linux", "win32"):
+        pytest.skip("Requires Windows/Linux SDK")
     ready = tmp_path / "ready.json"
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
@@ -55,14 +55,14 @@ def test_child_keeps_fixed_host_with_extra_search_path(tmp_path, monkeypatch):
         assert process.client.check_health()
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux native .so")
+@pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires Windows/Linux native SDK")
 def test_build_sdk_through_source_launcher(tmp_path):
     output = tmp_path / "native"
     result = subprocess.run([sys.executable, str(SOURCE_ROOT / "main.py"), "build-sdk",
                              "--hardware", "motion/rotary_axis", "--output", str(output)],
                             cwd=tmp_path, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
-    library = ctypes.CDLL(str(output / "libsimulatorx_sdk.so"))
+    library = ctypes.CDLL(str(output / ("simulatorx_sdk.dll" if sys.platform == "win32" else "libsimulatorx_sdk.so")))
     assert library.SX_Enable and library.SX_GetPosition
 
 

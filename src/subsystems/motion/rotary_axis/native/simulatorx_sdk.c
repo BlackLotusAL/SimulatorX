@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "simulatorx_sdk.h"
+#ifndef _WIN32
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -14,10 +15,16 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+typedef int sx_socket;
+#define sx_close close
+#else
+#include "windows_transport.h"
+#endif
 
 _Static_assert(sizeof(double) == 8, "Reference wire ABI requires binary64 double");
 _Static_assert(sizeof(SX_State) == 48, "Unexpected reference SX_State layout");
 
+#ifndef _WIN32
 static int64_t milliseconds(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) return -1;
@@ -55,6 +62,8 @@ static int transfer(int fd, unsigned char *buffer, size_t length, int sending, i
     return 0;
 }
 
+#endif
+
 static void put_u32(unsigned char *p, uint32_t value) {
     uint32_t network = htonl(value);
     memcpy(p, &network, 4);
@@ -80,6 +89,7 @@ static double get_double(const unsigned char *p) {
     return value;
 }
 
+#ifndef _WIN32
 static int32_t control_failure(int saved_errno) {
     char line[192];
     int length = snprintf(line, sizeof(line), "pid=%ld SDK control failure errno=%d\n",
@@ -96,15 +106,30 @@ static int32_t control_failure(int saved_errno) {
     return SX_CONTROL_ERROR;
 }
 
+#endif
+
 static int32_t call(uint32_t opcode, int32_t axis, double first, double second, SX_State *state) {
+#ifdef _WIN32
+    char endpoint[128], timeout_setting[32];
+    DWORD endpoint_size = GetEnvironmentVariableA("SIMULATORX_SDK_ENDPOINT", endpoint, sizeof(endpoint));
+    DWORD setting_size = GetEnvironmentVariableA("SIMULATORX_CONTROL_TIMEOUT_MS", timeout_setting, sizeof(timeout_setting));
+    if (!endpoint_size || endpoint_size >= sizeof(endpoint) || setting_size >= sizeof(timeout_setting))
+        return control_failure(EINVAL);
+    const char *setting = setting_size ? timeout_setting : NULL;
+#else
     const char *path = getenv("SIMULATORX_CONTROL_SOCKET");
     const char *setting = getenv("SIMULATORX_CONTROL_TIMEOUT_MS");
+#endif
     long timeout = 1000;
+#ifndef _WIN32
     struct sockaddr_un address;
+#endif
     unsigned char request[28] = {0}, response[56];
     if (!isfinite(first) || !isfinite(second)) return SX_INVALID_ARGUMENT;
+#ifndef _WIN32
     if (!path || !*path || strlen(path) >= sizeof(address.sun_path))
         return control_failure(EINVAL);
+#endif
     if (setting && *setting) {
         char *end;
         errno = 0;
@@ -114,7 +139,12 @@ static int32_t call(uint32_t opcode, int32_t axis, double first, double second, 
     int64_t now = milliseconds();
     if (now < 0) return control_failure(errno);
     int64_t deadline = now + timeout;
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    sx_socket fd;
+#ifdef _WIN32
+    fd = windows_connect(endpoint, deadline);
+    if (fd == INVALID_SOCKET) return control_failure(errno);
+#else
+    fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (fd < 0) return control_failure(errno);
     memset(&address, 0, sizeof(address));
     address.sun_family = AF_UNIX;
@@ -128,6 +158,7 @@ static int32_t call(uint32_t opcode, int32_t axis, double first, double second, 
         if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &size) < 0) goto failed;
         if (error) { errno = error; goto failed; }
     }
+#endif
     memcpy(request, "SX01", 4);
     put_u32(request + 4, opcode);
     put_u32(request + 8, (uint32_t)axis);
@@ -136,7 +167,7 @@ static int32_t call(uint32_t opcode, int32_t axis, double first, double second, 
     /* One exchange, no reconnect/retry: a lost reply may follow an executed command. */
     if (transfer(fd, request, sizeof(request), 1, deadline) < 0 ||
         transfer(fd, response, sizeof(response), 0, deadline) < 0) goto failed;
-    close(fd);
+    sx_close(fd);
     if (memcmp(response, "SX01", 4)) return control_failure(EPROTO);
     uint32_t raw_code = get_u32(response + 4);
     int32_t code;
@@ -163,7 +194,7 @@ static int32_t call(uint32_t opcode, int32_t axis, double first, double second, 
 failed:
     {
         int saved_errno = errno;
-        close(fd);
+        sx_close(fd);
         return control_failure(saved_errno);
     }
 }

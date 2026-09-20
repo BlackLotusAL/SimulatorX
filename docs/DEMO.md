@@ -24,7 +24,7 @@ Linux／WSL 对应使用 `.venv/bin/python`。启动输出包含网页 URL 和 O
 | `--port 8080` | 指定网页端口；被占用时失败，不影响占用进程 |
 | `--no-browser` | 不自动打开浏览器，仍输出可访问 URL |
 | `--artifacts 路径` | 报告根目录，默认项目的 `artifacts/demo/`，按协议与运行 ID 隔离 |
-| `--sdk-library 路径` | 已构建的参考 `.so`；未传时首次选择 SDK 自动构建 |
+| `--sdk-library 路径` | 已构建的参考 DLL／`.so`；未传时首次选择 SDK 自动构建 |
 | `--ready-file 路径` | 为进程管理和自动验收输出就绪地址 |
 | `--managed` | 从父进程 stdin 收到一行或 EOF 时退出 |
 
@@ -32,17 +32,17 @@ Linux／WSL 对应使用 `.venv/bin/python`。启动输出包含网页 URL 和 O
 
 ## SDK 旋转轴
 
-SDK 沿用 **Linux／WSL** 限制，构建需要 `cc` 或 `gcc`。Windows 可运行 PLC/TCP 演示；选择 SDK 时显示平台不支持原因，其他演示继续可用。缺编译器或无法加载库时显示实际错误，不使用替代控制调用。
+Windows 原生支持 **x64 Python + MinGW-w64 GCC**（目标 `x86_64-w64-mingw32`，`gcc` 需在 PATH）。Linux／WSL 使用 `cc` 或 `gcc`。Windows 不需要 WSL；缺编译器或无法加载库时显示实际错误，不使用替代控制调用。
 
 ```sh
 python src/main.py build-sdk --hardware motion/rotary_axis --output artifacts/native
-# Linux／WSL 指定已构建库
-python src/main.py demo --sdk-library artifacts/native/libsimulatorx_sdk.so
+# Windows 指定已构建库；Linux 对应 libsimulatorx_sdk.so
+python src/main.py demo --sdk-library artifacts/native/simulatorx_sdk.dll
 ```
 
 手动演示先“使能”→“回零”，再执行绝对或相对移动。默认目标／增量为 30°，速度 90°/s；目标和最终位置范围 −180..180°，速度必须大于 0 且不超过 90°/s。也可停止、禁用、清故障；模型故障条件通过“重置环境”清除。
 
-中央表盘蓝线表示真实位置，橙线表示目标；曲线分别显示位置、目标和速度。状态来自设备只读快照，控制操作在独立进程调用真实 `SX_*` `.so`。
+中央表盘蓝线表示真实位置，橙线表示目标；曲线分别显示位置、目标和速度。状态来自设备只读快照，控制操作在独立进程调用真实 `SX_*` DLL／`.so`。
 
 | 用例 | 条件与业务判定 |
 |---|---|
@@ -52,7 +52,7 @@ python src/main.py demo --sdk-library artifacts/native/libsimulatorx_sdk.so
 | 正限位 | 设置 positive_limit，运动命令被模型拒绝 |
 | 堵转超时 | 设置 stalled，SUT 在 4 s 业务期限后超时并停止 |
 
-`SX_State` 为 48 字节，`SX_*` ABI、报文格式和返回码不变。测试控制与原生业务调用使用独立 Unix socket，原生库通过 `SIMULATORX_CONTROL_SOCKET` 获取业务地址；错误文件和超时变量沿用原有约定。
+Windows DLL 使用 cdecl；`SX_State` 为 48 字节。Windows 宿主为测试控制与原生业务调用分别分配本机 TCP 端口；Linux 保留两个 Unix socket。`SX_*` ABI、报文格式和返回码不变，Windows 库使用 `SIMULATORX_SDK_ENDPOINT=tcp://127.0.0.1:<port>`。Linux 使用原有 `SIMULATORX_CONTROL_SOCKET`；错误文件和超时变量在两平台保持相同语义。
 
 ## TCP 探测器
 
@@ -136,6 +136,6 @@ python -m pytest -c examples/demo/pytest.ini examples/demo/tests/tcp -q
 python -m pytest -q --junitxml=artifacts/junit.xml
 ```
 
-演示验收覆盖五例重复运行、手动操作、取消、强制取消重建、异常数值／坏质量、并发写入拦截、断连恢复、准备／断言／清理失败和仓库外启动。未安装演示依赖时，原有框架测试仍可运行，独立演示验收会跳过。根目录默认测试集不收集演示测试。SDK 回归在 Linux／WSL 使用 C 编译器；Windows 跳过 SDK 用例，继续验证 PLC/TCP 和 SDK 启动失败隔离。新增演示验收覆盖 SDK/TCP 各五例重复执行、跨协议互斥、手动操作、取消／强制重建、断连、准备／断言／清理失败和初始化重试。
+演示验收覆盖五例重复运行、手动操作、取消、强制取消重建、异常数值／坏质量、并发写入拦截、断连恢复、准备／断言／清理失败和仓库外启动。未安装演示依赖时，原有框架测试仍可运行，独立演示验收会跳过。根目录默认测试集不收集演示测试。SDK 回归在 Windows 使用 MinGW-w64 GCC，在 Linux／WSL 使用 C 编译器。新增演示验收覆盖 SDK/TCP 各五例重复执行、跨协议互斥、手动操作、取消／强制重建、断连、准备／断言／清理失败和初始化重试。
 
 参考框架的运行与接口契约见 [PRD](PRD.md)，离线结构说明见 [架构网页](architecture.html)。

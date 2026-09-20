@@ -7,7 +7,7 @@
  * and reports only the actual ABI result. It contains no simulator IPC code. */
 int main(void) {
     char line[256], command[32];
-    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
     puts("ready");
     while (fgets(line, sizeof(line), stdin)) {
         double angle = 0, speed = 90;

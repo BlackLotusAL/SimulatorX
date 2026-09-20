@@ -15,11 +15,11 @@
 | 子系统 / 硬件 | 当前交付 | 主要控制方式 |
 |---|---|---|
 | vacuum / chamber_plc | 单真空腔室、八个 OPC UA 原生可写节点、基础真空行为和 Reset | 原生写值、质量码、时间戳与方法调用 |
-| motion / rotary_axis | 单个有限行程旋转轴、参考 Linux `.so`、函数返回值序列及模型故障 | 专用 IPC 调用；测试控制接口配置返回值、卡住和限位 |
+| motion / rotary_axis | 单个有限行程旋转轴、参考 Windows DLL／Linux `.so`、函数返回值序列及模型故障 | 专用 IPC 调用；测试控制接口配置返回值、卡住和限位 |
 | detector / modbus_tcp | 独立请求应答服务、示例协议、应答字段序列 | 按完整请求选择字段，由协议编码器生成应答 |
 | pytest 接入 | device_service / device、层级硬件句柄、逐用例诊断和清理 | 按配置和显式子集管理生命周期 |
 
-运行与测试使用 **Python 3.9.12（64 位）**，运行依赖 `opcua==0.98.13`，测试基线 `pytest==8.4.2`；完整依赖见 [requirements.lock](../requirements.lock)。框架从 `src` 源码运行。完整 SDK 服务与 `.so` 验证在 Linux／WSL 中进行；TCP 和纯运动模型也可在 Windows 运行。
+运行与测试使用 **Python 3.9.12（64 位）**，运行依赖 `opcua==0.98.13`，测试基线 `pytest==8.4.2`；完整依赖见 [requirements.lock](../requirements.lock)。框架从 `src` 源码运行。完整 SDK 服务及原生库支持 Windows x64（MinGW-w64 GCC）与 Linux／WSL（C 编译器）。
 
 参考配置每个硬件各一个实例，支持配置多个独立实例；测试串行执行。TCP／OPC UA 监听 `127.0.0.1`，SDK 使用本地 Unix domain socket。并行 CI 作业应各自运行独立实例。当前交付验证了参考 SDK ABI 和示例 TCP 协议，真实厂商适配条件见[第 10 节](#adapters)。
 
@@ -53,7 +53,7 @@ flowchart LR
 
 业务用例先通过仿真接口准备环境，再调用 SUT 执行业务。SUT 按真实设备协议操作并读取或同步当前状态，用例通过 SUT 提供的查询/状态接口限时等待并断言结果。读取 SimulatorX 状态用于准备、健康检查和诊断，不作为 SUT 业务通过的依据。框架自身测试以 SimulatorX 为被测对象，仍可直接断言仿真状态。
 
-SDK 的 `.so` 在业务进程内负责接口适配，外部 SDK 服务负责行为计算。SDK 服务提供两个不同的 Unix socket：`sdk_socket` 接收 `.so` 的二进制调用，`control_socket` 接收测试侧 JSON 配置与查询。TCP 服务仅监听设备业务端口；Reset、响应序列、健康检查和诊断通过父子进程标准输入／输出管道传递，不额外监听控制端口，其业务应答不经过 SDK 服务。
+SDK 的 `.so` 在业务进程内负责接口适配，外部 SDK 服务负责行为计算。Linux SDK 服务提供两个不同的 Unix socket：`sdk_socket` 接收 `.so` 的二进制调用，`control_socket` 接收测试侧 JSON 配置与查询。Windows SDK 服务对应使用两个独立的 `127.0.0.1` 动态 TCP 端口，原生 DLL 的 ABI 与二进制报文保持一致。TCP 服务仅监听设备业务端口；Reset、响应序列、健康检查和诊断通过父子进程标准输入／输出管道传递，不额外监听控制端口，其业务应答不经过 SDK 服务。
 
 PLC 节点保存唯一业务状态，每轮行为从当前节点值推进，原生请求、行为更新与 Reset 由同一锁同步。SDK 命令、查询和时间更新在同一状态锁内同步；TCP 按完整请求原子选择应答字段。公共代码提供配置加载、生命周期编排、通信、序列和进程辅助能力，各硬件的状态实例互不共享。三个协议宿主复用 ServiceHardware 和统一子进程入口；PLC/SDK 共用 PeriodicLoop。三协议由子系统 ID 与硬件 ID 固定定位 model.py:create，宿主不导入真空、旋转轴或参考 TCP 设备。
 
@@ -161,9 +161,9 @@ P_next = P_current × exp(-dt / tau) + P_target × (1 - exp(-dt / tau))
 | ClearFault | 所有限位注入均撤销后允许清除报警 | 保留当前位置及回零状态，不恢复已取消的目标；卡住标志需单独撤销 |
 | 测试 Reset | 恢复初始角度、未使能和未回零，清除运动与模型故障 | 同时清空该 SDK 服务的序列、游标、调用计数和事件 |
 
-### 4.4 `.so` 与 SDK 服务的接口边界
+### 4.4 原生库与 SDK 服务的接口边界
 
-业务系统调用参考 `.so`，库向 SDK 服务传递函数标识、轴号、角度和速度，取得返回值与状态后写回本进程的输出缓冲区。跨进程只传递数据值，服务不解引用业务进程指针。输出参数只在成功时写入，失败时保留调用方原内容；调用方负责提供有效缓冲区。
+业务系统调用参考 DLL／`.so`，库向 SDK 服务传递函数标识、轴号、角度和速度，取得返回值与状态后写回本进程的输出缓冲区。跨进程只传递数据值，服务不解引用业务进程指针。输出参数只在成功时写入，失败时保留调用方原内容；调用方负责提供有效缓冲区。
 
 每次参考 ABI 调用新建一个本地连接，执行一次请求应答后关闭。整个交换由单调时钟约束超时，处理部分读写、断连和 SIGPIPE；可能已执行的命令不自动重发。通信失败返回 `SX_CONTROL_ERROR` 并记录环境错误，测试应停止复用该环境。IPC 会增加调用耗时，不能用它评估真实 SDK 性能。
 
@@ -264,7 +264,7 @@ device 默认把全部硬件的用例诊断写入 `artifacts/simulatorx/`，可�
 
 注入的 SDK 返回码和 TCP 异常字段属于测试条件；业务处理符合预期时用例可通过。服务不可用、SDK 专用 IPC 超时或断连、诊断／清理失败属于环境错误。参考 `.so` 的错误标记不能通过普通模型 Reset 擦除，需停止复用并重新建立可用环境。
 
-`SDKClient.call()` 可用于检查模型服务，验证业务集成必须实际加载 `.so`。仓库的 [native_client.c](../src/test/subsystems/motion/rotary_axis/native_client.c) 是通过参考 C ABI 访问模型的独立测试进程。
+`SDKClient.call()` 可用于检查模型服务，验证业务集成必须实际加载 DLL／`.so`。仓库的 [native_client.c](../src/test/subsystems/motion/rotary_axis/native_client.c) 是通过参考 C ABI 访问模型的独立测试进程。
 
 <a id="running"></a>
 
@@ -293,7 +293,7 @@ python src/main.py run --select vacuum/chamber_plc --select detector/modbus_tcp
 python src/main.py build-sdk --hardware motion/rotary_axis --output artifacts/native
 ```
 
-完整参考设备和原生 SDK 要求 Linux／WSL、Python 3.9.12；原生库构建还需 C 编译器。Windows 可显式选择 PLC/TCP，选中不支持的 SDK 时在任何服务启动前失败。默认端口为 0，系统自动分配。
+完整参考设备和原生 SDK 支持 Windows x64 与 Linux／WSL、Python 3.9.12；Windows 原生库构建需 MinGW-w64 GCC，Linux 需 C 编译器。可显式选择 PLC/TCP 子集。默认端口为 0，系统自动分配。
 
 整机全部就绪后输出含完整硬件标识与地址的 JSON；`--ready-file` 保存相同信息，`--managed` 在 stdin 收到一行或 EOF 后退出，普通启动使用 Ctrl+C 退出。运行中硬件退出或健康检查失败时，整机失败退出并逆序清理自建资源。
 
@@ -313,11 +313,12 @@ PLC 健康检查分别检查服务、监听器、线程存活和实际推进完�
 
 所有服务均由框架创建与回收，不设置模式。三协议共享固定入口解析器，配置中不填写入口。资源目录固定为 ID 对应包的 resources 并传给子进程；XML 相对该目录解析，也支持绝对路径，不依赖清单位置或工作目录。清单不接受 config/definition/package/mode、已有服务连接字段、业务参数注入或 PLC bindings 覆盖。
 
-SDK 业务进程加载构建出的 `.so`，并合并轴客户端 `launch_environment`：
+SDK 业务进程加载构建出的 DLL／`.so`，并合并轴客户端 `launch_environment`：
 
 | 环境变量 | 内容 |
 |---|---|
-| SIMULATORX_CONTROL_SOCKET | SDK 二进制调用 socket，不是 JSON 控制 socket |
+| SIMULATORX_CONTROL_SOCKET | Linux SDK 二进制调用 Unix socket，不是 JSON 控制 socket |
+| SIMULATORX_SDK_ENDPOINT | Windows DLL 二进制调用端点，格式为 tcp://127.0.0.1:端口 |
 | SIMULATORX_SDK_ERROR_FILE | 本轮原生错误文件 |
 | SIMULATORX_CONTROL_TIMEOUT_MS | ABI 交换超时，默认 1000 ms，允许 1–60000 ms |
 
@@ -357,7 +358,7 @@ TCP 只接受 `port` 指定仿真业务监听端口，省略或填写 0 时自�
 | 多硬件实例隔离、独立 Reset、服务资源释放、启动回滚 | [设备集成测试](../src/test/integration/test_device_runtime.py)、[编排测试](../src/test/framework/test_runtime.py) |
 | 仓库外源码启动、子进程搜索路径、自定义协议加载与源码构建 `.so` | [入口测试](../src/test/integration/test_cli.py) |
 
-核心回归使用 Python 3.9.12 和 requirements.lock，在 Linux／WSL 运行，覆盖框架、原生 SDK 与三协议接口；参考接口通过不代表真实厂商业务集成已经验收。
+核心回归使用 Python 3.9.12 和 requirements.lock，在 Windows x64 或 Linux／WSL 运行，覆盖框架、原生 SDK 与三协议接口；参考接口通过不代表真实厂商业务集成已经验收。
 
 执行命令：
 
@@ -365,7 +366,7 @@ TCP 只接受 `port` 指定仿真业务监听端口，省略或填写 0 时自�
 python -m pytest -q --junitxml=artifacts/junit.xml
 ```
 
-非 Linux 环境需显式选择 PLC/TCP 子集；原生 SDK 集成用例跳过，不能据此声称 `.so` 已验证。保留 JUnit 与控制台日志；虚拟环境、编译输出和运行诊断不纳入源码提交。
+Windows x64 原生 SDK 测试实际构建 DLL；Linux／WSL 实际构建 `.so`。不支持的平台需显式选择 PLC/TCP 子集，跳过原生测试不能视为原生库已验证。保留 JUnit 与控制台日志；虚拟环境、编译输出和运行诊断不纳入源码提交。
 
 <a id="adapters"></a>
 

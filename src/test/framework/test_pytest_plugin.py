@@ -112,8 +112,8 @@ TCPClient.reset = fail
 
 @pytest.mark.parametrize("selection", ["vacuum/chamber_plc", "motion/rotary_axis", "detector/modbus_tcp"])
 def test_plugin_only_starts_selected_hardware(tmp_path, selection):
-    if selection.startswith("motion") and sys.platform != "linux":
-        pytest.skip("Linux SDK")
+    if selection.startswith("motion") and sys.platform not in ("linux", "win32"):
+        pytest.skip("Requires Windows/Linux SDK")
     sid, hid = selection.split("/")
     result = run_cases(tmp_path, f'''
 def test_selected(device):

@@ -135,7 +135,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="SimulatorX PLC / SDK / TCP browser demo (local only)")
     parser.add_argument("--port", type=int, default=0, help="Local web port; 0 selects an available port")
     parser.add_argument("--no-browser", action="store_true")
-    parser.add_argument("--sdk-library", help="Existing reference .so; otherwise build on first SDK use")
+    parser.add_argument("--sdk-library", help="Existing reference DLL/.so; otherwise build on first SDK use")
     parser.add_argument("--artifacts", help="Directory for pytest run artifacts")
     parser.add_argument("--ready-file", help="Write local URL after startup")
     parser.add_argument("--managed", action="store_true", help="Exit on parent stdin input or EOF")

@@ -1,6 +1,7 @@
 import json
 import os
-import select
+import queue
+import shutil
 import socket
 import subprocess
 import sys
@@ -15,25 +16,35 @@ from subsystems.motion.rotary_axis import build
 from framework.transport import EnvironmentError
 from test.helpers import eventually
 
-pytestmark = [pytest.mark.integration, pytest.mark.linux_sdk, pytest.mark.skipif(sys.platform != "linux", reason="Linux native .so")]
+pytestmark = [pytest.mark.integration, pytest.mark.native_sdk, pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires Windows/Linux native SDK")]
 
 
 @pytest.fixture(scope="session")
 def native_driver(sdk_library, tmp_path_factory):
     native = Path(build.__file__).resolve().parent / "native"
-    executable = tmp_path_factory.mktemp("native-driver") / "driver"
-    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
-                    "-I", str(native), str(Path(__file__).with_name("native_client.c")),
-                    "-L", str(sdk_library.parent), "-lsimulatorx_sdk",
-                    "-Wl,-rpath," + str(sdk_library.parent), "-o", str(executable)],
-                   check=True, timeout=30)
+    windows = sys.platform == "win32"
+    executable = tmp_path_factory.mktemp("native-driver") / ("driver.exe" if windows else "driver")
+    command = ["gcc" if windows else "cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+               "-I", str(native), str(Path(__file__).with_name("native_client.c"))]
+    if windows:
+        shutil.copy2(sdk_library, executable.parent / sdk_library.name)
+        command += [str(sdk_library)]
+    else:
+        command += ["-L", str(sdk_library.parent), "-lsimulatorx_sdk", "-Wl,-rpath," + str(sdk_library.parent)]
+    subprocess.run(command + ["-o", str(executable)], check=True, timeout=30)
     return executable
 
 
 def read_line(process, timeout=3):
-    ready, _, _ = select.select([process.stdout], [], [], timeout)
-    assert ready, "Native process did not respond before deadline"
-    line = process.stdout.readline()
+    if not hasattr(process, "_lines"):
+        process._lines = queue.Queue()
+        def drain():
+            for line in process.stdout:
+                process._lines.put(line)
+            process._lines.put("")
+        process._reader = threading.Thread(target=drain, daemon=True)
+        process._reader.start()
+    line = process._lines.get(timeout=timeout)
     assert line, "Native process exited unexpectedly"
     return line
 
@@ -56,6 +67,7 @@ def native_sut(device, native_driver, request):
                 raise AssertionError("Native SUT did not stop")
             assert code == 0, process.stderr.read()
         finally:
+            process._reader.join(timeout=3)
             process.stdout.close()
             process.stderr.close()
 
@@ -121,8 +133,9 @@ def test_native_control_failure_is_logged_and_does_not_retry(native_driver, tmp_
     with tempfile.TemporaryDirectory(prefix="sx-timeout-") as directory:
         endpoint = str(Path(directory) / "sdk.sock")
         error_file = str(Path(directory) / "errors")
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
-            listener.bind(endpoint)
+        with socket.socket(socket.AF_INET if sys.platform == "win32" else socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0) if sys.platform == "win32" else endpoint)
+            routing = {"SIMULATORX_SDK_ENDPOINT": "tcp://%s:%s" % listener.getsockname()} if sys.platform == "win32" else {"SIMULATORX_CONTROL_SOCKET": endpoint}
             listener.listen()
             listener.settimeout(2)
             received = []
@@ -138,7 +151,7 @@ def test_native_control_failure_is_logged_and_does_not_retry(native_driver, tmp_
             started = time.monotonic()
             result = subprocess.run([str(native_driver)], input="enable\n", capture_output=True,
                                     text=True, timeout=3,
-                                    env={**os.environ, "SIMULATORX_CONTROL_SOCKET": endpoint,
+                                    env={**os.environ, **routing,
                                          "SIMULATORX_SDK_ERROR_FILE": error_file,
                                          "SIMULATORX_CONTROL_TIMEOUT_MS": "100"})
             worker.join(timeout=3)

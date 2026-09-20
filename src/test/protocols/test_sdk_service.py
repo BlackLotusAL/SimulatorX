@@ -72,7 +72,7 @@ def test_invalid_override_rejected_without_replacing_sequence(tmp_path, values):
     assert service.invoke("rotary", "Enable", {})["return_value"] == 5
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux SDK service")
+@pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires Windows/Linux SDK service")
 @pytest.mark.integration
 def test_service_advances_without_polling_and_stall_has_no_catchup():
     with service_process("sdk") as process:

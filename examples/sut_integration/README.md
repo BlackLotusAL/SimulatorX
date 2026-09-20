@@ -41,7 +41,7 @@ operation_id = vacuum.start_pump()
 status = vacuum.get_status(operation_id)
 vacuum.close()
 
-motion = MotionSUT(library_path, position_tolerance=0.01)  # Linux .so
+motion = MotionSUT(library_path, position_tolerance=0.01)  # Windows DLL / Linux .so
 operation_id = motion.start_move(target_deg=30, speed_deg_s=90)
 motion.close()
 
@@ -103,16 +103,16 @@ SUT 业务断言失败与环境错误分开报告：仿真服务健康检查、�
 
 ## 运行与验收
 
-在仓库根目录安装 `requirements.lock`，下面命令中的 `python` 应指向该环境。完整验收要求 Linux／WSL、Python 3.9.12 和 C 编译器；SDK 测试会构建并真实加载 `.so`。
+在仓库根目录安装 `requirements.lock`，下面命令中的 `python` 应指向该环境。完整验收要求 Python 3.9.12（64 位）；Windows 使用 MinGW-w64 GCC 构建并真实加载 DLL，Linux／WSL 使用 C 编译器构建并加载 `.so`。
 
 ```sh
 # 示例完整验收：业务闭环 + SUT 自身和清理机制测试
 python -m pytest -c examples/sut_integration/pytest.ini examples/sut_integration/tests --simulatorx-artifacts artifacts/sut-example/simulatorx --sut-artifacts artifacts/sut-example/sut --junitxml=artifacts/sut-example/junit.xml -q
 
-# Windows 显式选择 PLC/TCP；SDK 业务用例标记跳过
+# 可选：仅验证 PLC/TCP 子集
 python -m pytest -c examples/sut_integration/pytest.ini examples/sut_integration/tests --simulatorx-select vacuum/chamber_plc --simulatorx-select detector/modbus_tcp --simulatorx-artifacts artifacts/sut-example/simulatorx --sut-artifacts artifacts/sut-example/sut --junitxml=artifacts/sut-example/windows.xml -q
 
-# 框架自身回归（独立命令、独立报告，Linux／WSL）
+# 框架自身回归（独立命令、独立报告）
 python -m pytest -q --junitxml=artifacts/framework-junit.xml
 ```
 
@@ -122,7 +122,7 @@ python -m pytest -q --junitxml=artifacts/framework-junit.xml
 
 `-m 'not integration'` 只运行参考 SUT 的内存操作测试；真实网络对端、业务闭环和隔离 pytest 子进程均标记为 `integration`。默认仍执行全部示例用例，快速筛选不代替完整验收。
 
-流水线保留 pytest 原始退出码并始终归档 JUnit、`artifacts/sut-example/sut/` 和 `artifacts/sut-example/simulatorx/`。示例自身测试中的隔离子进程会故意产生失败，以验证清理和中止机制；外层测试验证这些失败符合预期。Windows 的 SDK 跳过不代表完整三协议验收通过。不存在适用于任意流水线平台的自动发布或流水线配置。
+流水线保留 pytest 原始退出码并始终归档 JUnit、`artifacts/sut-example/sut/` 和 `artifacts/sut-example/simulatorx/`。示例自身测试中的隔离子进程会故意产生失败，以验证清理和中止机制；外层测试验证这些失败符合预期。选择 PLC/TCP 子集不代表完整三协议验收通过。不存在适用于任意流水线平台的自动发布或流水线配置。
 
 ## 替换为真实业务服务
 

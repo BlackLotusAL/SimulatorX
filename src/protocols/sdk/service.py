@@ -10,9 +10,12 @@ from framework.transport import EnvironmentError, Listener, diagnostic_value, js
 
 class SDKService:
     def __init__(self, control_socket, sdk_socket, model, adapter, error_file=None, clock=time.monotonic):
-        self.control_socket, self.sdk_socket = str(control_socket), str(sdk_socket)
-        if self.control_socket == self.sdk_socket:
+        self.control_socket = str(control_socket) if isinstance(control_socket, (str, Path)) else tuple(control_socket)
+        self.sdk_socket = str(sdk_socket) if isinstance(sdk_socket, (str, Path)) else tuple(sdk_socket)
+        if isinstance(self.sdk_socket, str) and self.control_socket == self.sdk_socket:
             raise ValueError("SDK and control sockets must use different paths")
+        if not error_file and not isinstance(self.sdk_socket, str):
+            raise ValueError("TCP SDK transport requires an error file")
         self.error_file = str(error_file) if error_file else self.sdk_socket + ".errors"
         self.model, self.adapter = model, adapter
         self.sequences = Sequences()
@@ -34,6 +37,7 @@ class SDKService:
                 pass
             self.control.start()
             self.native.start()
+            self.control_socket, self.sdk_socket = self.control.address, self.native.address
             self._last_time = self.clock()
             self.loop.start()
             return self

@@ -1,5 +1,6 @@
 """SDK hardware ownership; native library building is supplied by the device."""
 import sys
+import struct
 from pathlib import Path
 
 from framework.hosting import ServiceHardware, definition, reject_settings
@@ -19,18 +20,22 @@ class SDKHardware(ServiceHardware):
 
     def validate(self):
         reject_settings(self.config, {"control_socket", "sdk_socket", "error_file", "endpoint", "control_endpoint", "mode"})
-        if sys.platform != "linux":
-            raise RuntimeError("SDK .so integration requires Linux or WSL")
+        if sys.platform not in ("linux", "win32"):
+            raise RuntimeError("SDK integration requires Windows x64, Linux or WSL")
+        if sys.platform == "win32" and struct.calcsize("P") != 8:
+            raise RuntimeError("SDK integration requires 64-bit Python on Windows")
         self.definition = definition(self.config, SDKDefinition)
         components(self.config, self.definition)
 
     def service_settings(self, directory):
         return {**super().service_settings(directory),
-                "control_socket": str(directory / "control.sock"),
-                "sdk_socket": str(directory / "sdk.sock"),
+                "control_socket": ["127.0.0.1", 0] if sys.platform == "win32" else str(directory / "control.sock"),
+                "sdk_socket": ["127.0.0.1", 0] if sys.platform == "win32" else str(directory / "sdk.sock"),
                 "error_file": str(directory / "native.errors")}
 
     def connect(self, info):
+        if not isinstance(info["control_socket"], str):
+            return SDKClient(tuple(info["control_socket"]))
         path = Path(info["control_socket"])
         return SDKClient(str((self.config.directory / path).resolve()))
 

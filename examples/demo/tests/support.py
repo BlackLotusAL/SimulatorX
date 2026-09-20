@@ -5,8 +5,8 @@ import time
 from xml.etree import ElementTree
 import pytest
 
-SDK_SUPPORTED = sys.platform == "linux"
-SDK_REQUIRED = pytest.mark.skipif(not SDK_SUPPORTED, reason="Native SDK requires Linux/WSL")
+SDK_SUPPORTED = sys.platform in ("linux", "win32")
+SDK_REQUIRED = pytest.mark.skipif(not SDK_SUPPORTED, reason="Native SDK requires Windows/Linux/WSL")
 
 
 def until(predicate, timeout=45):

@@ -75,17 +75,17 @@ docs/                           # 需求契约与测试审查资料
 
 ```sh
 python -m pip install -r requirements.lock
-# 完整参考设备需要 Linux／WSL
+# 完整参考设备支持 Windows x64 和 Linux／WSL
 python src/main.py run --device src/device.json
-# Windows 或仅需部分硬件时，显式选择子集
+# 仅需部分硬件时，显式选择子集
 python src/main.py run --select vacuum/chamber_plc --select detector/modbus_tcp
-# 原生 SDK 构建需要 Linux／WSL 和 C 编译器
+# 原生 SDK：Windows 使用 MinGW-w64 GCC，Linux 使用 cc/gcc
 python src/main.py build-sdk --hardware motion/rotary_axis --output artifacts/native
 ```
 
 默认设备配置为 `src/device.json`。`--select` 可重复，省略时运行整机；不会自动跳过平台不支持的硬件。所有选中硬件通过预检后才开始启动，全部就绪后输出包含完整硬件标识及实际地址的 JSON。端口 0 由系统分配。Ctrl+C 停止；`--managed` 从 stdin 收到一行或 EOF 后停止；`--ready-file` 输出就绪 JSON。
 
-任一硬件启动失败会逆序回收已启动资源。运行时健康检查失败会退出并清理自建进程。原生 SDK 沿用 Linux socket 和 `.so` 约束；环境变量及 ABI 见 [PRD](docs/PRD.md)。
+任一硬件启动失败会逆序回收已启动资源。运行时健康检查失败会退出并清理自建进程。原生 SDK 支持 Windows DLL（本机 TCP）及 Linux `.so`（Unix socket）；环境变量及 ABI 见 [PRD](docs/PRD.md)。
 
 ## 装配配置
 
@@ -227,7 +227,7 @@ PLC 模型工厂只接收节点访问对象；SDK/TCP 模型工厂无参数。TC
 python -m pytest -q --junitxml=artifacts/junit.xml
 ```
 
-完整验收在 Linux／WSL 中进行。Windows 验证 PLC/TCP 与框架时显式指定子集：
+完整验收支持 Windows x64 + MinGW-w64 GCC 及 Linux／WSL + C 编译器。仅验证 PLC/TCP 时可显式指定子集：
 
 ```sh
 python -m pytest src/test --simulatorx-select vacuum/chamber_plc --simulatorx-select detector/modbus_tcp -q

@@ -14,8 +14,8 @@ class AxisState(c.Structure):
 class MotionSUT(OperationSUT):
     def __init__(self, library_path, *, position_tolerance=0.01, **options):
         super().__init__(**options)
-        if sys.platform != "linux":
-            raise RuntimeError("Reference native SDK requires Linux/WSL")
+        if sys.platform not in ("linux", "win32"):
+            raise RuntimeError("Reference native SDK requires Windows/Linux/WSL")
         self.position_tolerance = positive(position_tolerance, "position_tolerance")
         self._sdk = c.CDLL(str(library_path))
         for name in ("Enable", "Disable", "Stop", "ClearFault"):

@@ -25,8 +25,8 @@ def test_pump(sut, expected):
         assert status["observed"]["state_code"] == 3
 
 
-@pytest.mark.linux_sdk
-@pytest.mark.skipif(sys.platform != "linux", reason="Requires actual Linux .so")
+@pytest.mark.native_sdk
+@pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires native SDK")
 @pytest.mark.parametrize("scenario,expected", [
     (("motion", "normal"), None),
     (("motion", "sdk_error"), "sdk_error"),
@@ -86,8 +86,8 @@ def test_repeated_pump_has_separate_operation_results(sut):
     assert sut.get_status(first) == previous
 
 
-@pytest.mark.linux_sdk
-@pytest.mark.skipif(sys.platform != "linux", reason="Requires actual Linux .so")
+@pytest.mark.native_sdk
+@pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires native SDK")
 @pytest.mark.parametrize("scenario", [("motion", "normal")], indirect=True)
 def test_repeated_move_waits_for_new_target(sut):
     first = sut.start_move(30, 90)

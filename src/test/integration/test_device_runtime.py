@@ -32,9 +32,9 @@ def test_two_runtimes_of_same_device_are_isolated():
 
 
 def test_sdk_platform_rejected_before_any_process_starts(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "darwin")
     device = reference()
-    with pytest.raises(RuntimeError, match="Linux or WSL"):
+    with pytest.raises(RuntimeError, match="Windows x64, Linux or WSL"):
         device.start()
     assert all(h.process is None for h in device.hardware())
 
@@ -57,7 +57,7 @@ def test_port_conflict_rolls_back_other_hardware_without_stopping_owner(tmp_path
             pass
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Native SDK requires Linux")
+@pytest.mark.skipif(sys.platform not in ("linux", "win32"), reason="Requires Windows/Linux native SDK")
 @pytest.mark.integration
 def test_full_machine_and_individual_reset():
     with reference() as device:
